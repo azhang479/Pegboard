@@ -3,9 +3,22 @@
   const PAD = 26;        // board padding to the first hole center
   const T = 16;          // wall thickness
   const PEG = 26;        // peg diameter
+  const THUMB = 92;      // palette thumbnail box for corner pieces
   const WALL_LENGTHS = [1, 2, 3, 4, 5, 6];
   const SWATCHES = ['#e63946', '#f4a261', '#e9c46a', '#2a9d8f', '#457b9d', '#6a4c93', '#ffffff', '#222222'];
   const STORAGE_KEY = 'pegboard-v1';
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  // Direction indices rotate clockwise: E -> S -> W -> N.
+  const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+  // Arms leaving the pivot hole at rotation 0. Every arm is `len` holes long.
+  const SHAPE_ARMS = {
+    I: [0],          // straight wall, pivot at one end
+    L: [0, 1],       // corner at the pivot
+    T: [2, 0, 1],    // bar across, stem down from the middle
+    X: [0, 1, 2, 3], // cross centered on the pivot
+  };
+  const SHAPE_NAMES = { L: 'L piece', T: 'T piece', X: 'X piece' };
 
   const $ = (id) => document.getElementById(id);
   const boardEl = $('board');
@@ -19,16 +32,34 @@
   let drag = null;
   let previewEl = null;
   let lastTap = { id: null, t: 0 };
+  let shapeLen = 2;
+  let shapeRot = 0;
 
   // ---------- geometry ----------
 
-  function cellsOf(p) {
-    if (p.type === 'peg') return [[p.c, p.r]];
-    const cells = [];
-    for (let i = 0; i <= p.len; i++) {
-      cells.push(p.dir === 'h' ? [p.c + i, p.r] : [p.c, p.r + i]);
+  function armsOf(p) {
+    return SHAPE_ARMS[p.shape].map((d) => DIRS[(d + p.rot) % 4]);
+  }
+
+  // Cells relative to the pivot hole.
+  function offsetsOf(p) {
+    if (p.type === 'peg') return [[0, 0]];
+    const out = [[0, 0]];
+    for (const [dx, dy] of armsOf(p)) {
+      for (let i = 1; i <= p.len; i++) out.push([dx * i, dy * i]);
     }
-    return cells;
+    return out;
+  }
+
+  function cellsOf(p) {
+    return offsetsOf(p).map(([x, y]) => [p.c + x, p.r + y]);
+  }
+
+  function extentOf(p) {
+    const offs = offsetsOf(p);
+    const xs = offs.map((o) => o[0]);
+    const ys = offs.map((o) => o[1]);
+    return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
   }
 
   function occupancy(excludeId) {
@@ -46,9 +77,15 @@
       c >= 0 && r >= 0 && c < cols && r < rows && !occ.has(c + ',' + r));
   }
 
-  // Offset (px) from an element's top-left corner to the center of its first hole.
+  // Offset (px) from an element's top-left corner to the center of its pivot hole.
   function anchorOf(p) {
-    return p.type === 'peg' ? { x: PEG / 2, y: PEG / 2 } : { x: T / 2, y: T / 2 };
+    if (p.type === 'peg') return { x: PEG / 2, y: PEG / 2 };
+    const e = extentOf(p);
+    return { x: -e.minX * S + T / 2, y: -e.minY * S + T / 2 };
+  }
+
+  function nextRot(p) {
+    return p.shape === 'I' ? p.rot ^ 1 : (p.rot + 1) % 4;
   }
 
   function holeX(c) { return PAD + c * S; }
@@ -56,27 +93,40 @@
 
   // ---------- rendering ----------
 
+  function svgEl(tag, attrs) {
+    const el = document.createElementNS(SVG_NS, tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+
   function makePieceEl(p) {
     const el = document.createElement('div');
     if (p.type === 'peg') {
       el.className = 'peg';
       el.style.width = el.style.height = PEG + 'px';
       el.style.background = p.color;
-    } else {
-      const long = p.len * S + T;
-      el.className = 'wall';
-      el.style.width = (p.dir === 'h' ? long : T) + 'px';
-      el.style.height = (p.dir === 'h' ? T : long) + 'px';
-      for (const k of [0, p.len]) {
-        const end = document.createElement('div');
-        end.className = 'end';
-        const along = k * S + T / 2 - 2 - 4; // minus border and half the dot
-        const across = T / 2 - 2 - 4;
-        end.style.left = (p.dir === 'h' ? along : across) + 'px';
-        end.style.top = (p.dir === 'h' ? across : along) + 'px';
-        el.appendChild(end);
+      return el;
+    }
+
+    const e = extentOf(p);
+    const w = (e.maxX - e.minX) * S + T;
+    const h = (e.maxY - e.minY) * S + T;
+    const a = anchorOf(p);
+    el.className = 'wall';
+    el.style.width = w + 'px';
+    el.style.height = h + 'px';
+
+    const svg = svgEl('svg', { width: w, height: h, viewBox: `0 0 ${w} ${h}` });
+    const ends = armsOf(p).map(([dx, dy]) => [a.x + dx * p.len * S, a.y + dy * p.len * S]);
+    for (const [cls, width] of [['edge', T], ['fill', T - 4]]) {
+      for (const [x, y] of ends) {
+        svg.appendChild(svgEl('line', { class: cls, x1: a.x, y1: a.y, x2: x, y2: y, 'stroke-width': width }));
       }
     }
+    for (const [x, y] of [[a.x, a.y], ...ends]) {
+      svg.appendChild(svgEl('circle', { class: 'dot', cx: x, cy: y, r: 4 }));
+    }
+    el.appendChild(svg);
     return el;
   }
 
@@ -103,7 +153,6 @@
       const el = makePieceEl(p);
       el.dataset.id = p.id;
       positionOnBoard(el, p);
-      if (drag && drag.piece.id === p.id) el.classList.add('piece-dragging');
       el.addEventListener('pointerdown', (e) => startBoardDrag(e, p));
       el.addEventListener('contextmenu', (e) => {
         e.preventDefault();
@@ -114,27 +163,38 @@
     previewEl = null;
   }
 
+  function makePaletteEl(proto, title, scale = 1) {
+    const el = makePieceEl(proto);
+    el.style.touchAction = 'none';
+    el.title = title;
+    if (scale !== 1) {
+      el.style.transform = `scale(${scale})`;
+      el.style.transformOrigin = 'top left';
+    }
+    el.addEventListener('pointerdown', (e) => startPaletteDrag(e, proto, el, scale));
+    return el;
+  }
+
   function renderPalette() {
     const hRow = $('palette-h');
     const vRow = $('palette-v');
     hRow.innerHTML = vRow.innerHTML = '';
-    for (const dir of ['h', 'v']) {
+    for (const rot of [0, 1]) {
       for (const len of WALL_LENGTHS) {
-        const proto = { type: 'wall', len, dir };
+        const proto = { type: 'wall', shape: 'I', len, rot };
         const item = document.createElement('div');
         item.className = 'palette-item';
         const label = document.createElement('span');
         label.className = 'label';
         label.textContent = len;
-        const wall = makePieceEl(proto);
+        const wall = makePaletteEl(proto, `Length ${len} wall (spans ${len + 1} holes)`);
         wall.style.position = 'relative';
-        wall.style.touchAction = 'none';
-        wall.title = `Length ${len} wall (spans ${len + 1} holes)`;
-        wall.addEventListener('pointerdown', (e) => startPaletteDrag(e, proto, wall));
         item.append(label, wall);
-        (dir === 'h' ? hRow : vRow).appendChild(item);
+        (rot === 0 ? hRow : vRow).appendChild(item);
       }
     }
+    renderShapeLengths();
+    renderShapePalette();
     renderPegPalette();
 
     const sw = $('swatches');
@@ -152,26 +212,66 @@
     }
   }
 
+  function renderShapeLengths() {
+    const seg = $('shape-lengths');
+    seg.innerHTML = '';
+    for (const len of WALL_LENGTHS) {
+      const b = document.createElement('button');
+      b.textContent = len;
+      b.title = `Arm length ${len}`;
+      b.classList.toggle('active', len === shapeLen);
+      b.addEventListener('click', () => {
+        shapeLen = len;
+        renderShapeLengths();
+        renderShapePalette();
+      });
+      seg.appendChild(b);
+    }
+  }
+
+  function renderShapePalette() {
+    const holder = $('palette-shapes');
+    holder.innerHTML = '';
+    for (const shape of ['L', 'T', 'X']) {
+      const proto = { type: 'wall', shape, len: shapeLen, rot: shapeRot };
+      const e = extentOf(proto);
+      const w = (e.maxX - e.minX) * S + T;
+      const h = (e.maxY - e.minY) * S + T;
+      const scale = Math.min(1, (THUMB - 8) / Math.max(w, h));
+
+      const item = document.createElement('div');
+      item.className = 'shape-item';
+      const box = document.createElement('div');
+      box.className = 'shape-thumb';
+      const el = makePaletteEl(proto, `${SHAPE_NAMES[shape]}, arm length ${shapeLen}`, scale);
+      el.style.left = (THUMB - w * scale) / 2 + 'px';
+      el.style.top = (THUMB - h * scale) / 2 + 'px';
+      box.appendChild(el);
+      const label = document.createElement('span');
+      label.className = 'label';
+      label.textContent = shape;
+      item.append(box, label);
+      holder.appendChild(item);
+    }
+  }
+
   function renderPegPalette() {
     const holder = $('palette-peg');
     holder.innerHTML = '';
-    const proto = { type: 'peg', color: colorInput.value };
-    const el = makePieceEl(proto);
+    const el = makePaletteEl({ type: 'peg', color: colorInput.value }, 'Drag a peg onto the board');
     el.style.position = 'relative';
-    el.style.touchAction = 'none';
-    el.title = 'Drag a peg onto the board';
-    el.addEventListener('pointerdown', (e) => startPaletteDrag(e, { ...proto, color: colorInput.value }, el));
     holder.appendChild(el);
   }
 
   // ---------- drag & drop ----------
 
-  function startPaletteDrag(e, proto, el) {
+  function startPaletteDrag(e, proto, el, scale) {
     if (e.button !== 0) return;
     e.preventDefault();
     const rect = el.getBoundingClientRect();
     const a = anchorOf(proto);
-    beginDrag(e, { ...proto, id: null }, e.clientX - (rect.left + a.x), e.clientY - (rect.top + a.y), false);
+    beginDrag(e, { ...proto, id: null },
+      (e.clientX - rect.left) / scale - a.x, (e.clientY - rect.top) / scale - a.y, false);
   }
 
   function startBoardDrag(e, p) {
@@ -202,6 +302,7 @@
   function rebuildGhost() {
     ghostEl.innerHTML = '';
     ghostEl.appendChild(makePieceEl(drag.piece));
+    if (previewEl) { previewEl.remove(); previewEl = null; }
   }
 
   function overBoard(x, y) {
@@ -221,11 +322,9 @@
       const valid = canPlace(candidate, piece.id);
       drag.snap = { c, r, valid };
 
-      if (!previewEl || previewEl.dataset.key !== `${piece.type}${piece.len}${piece.dir}`) {
-        if (previewEl) previewEl.remove();
+      if (!previewEl) {
         previewEl = makePieceEl(piece);
         previewEl.classList.add('preview');
-        previewEl.dataset.key = `${piece.type}${piece.len}${piece.dir}`;
         boardEl.appendChild(previewEl);
       }
       previewEl.classList.toggle('invalid', !valid);
@@ -259,7 +358,7 @@
           placed.id = nextId++;
           pieces.push(placed);
         }
-      } else if (fromBoard && !snap && drag.moved) {
+      } else if (fromBoard && !snap) {
         pieces = pieces.filter((p) => p.id !== piece.id);
       }
     }
@@ -273,8 +372,12 @@
 
   function rotateDrag() {
     if (!drag || drag.piece.type !== 'wall') return;
-    drag.piece = { ...drag.piece, dir: drag.piece.dir === 'h' ? 'v' : 'h' };
-    [drag.grabX, drag.grabY] = [drag.grabY, drag.grabX];
+    const rot = nextRot(drag.piece);
+    // Rotate the grab point around the pivot so the cursor stays on the piece.
+    for (let q = (rot - drag.piece.rot + 4) % 4; q > 0; q--) {
+      [drag.grabX, drag.grabY] = [-drag.grabY, drag.grabX];
+    }
+    drag.piece = { ...drag.piece, rot };
     rebuildGhost();
     updateDrag();
   }
@@ -297,7 +400,7 @@
   // ---------- piece actions ----------
 
   function rotatePlaced(p) {
-    const rotated = { ...p, dir: p.dir === 'h' ? 'v' : 'h' };
+    const rotated = { ...p, rot: nextRot(p) };
     if (!canPlace(rotated, p.id)) return;
     pieces = pieces.map((q) => (q.id === p.id ? rotated : q));
     renderBoard();
@@ -316,10 +419,17 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ cols, rows, pieces }));
   }
 
+  // Boards saved before corner pieces stored walls as { dir: 'h' | 'v' }.
+  function migrate(p) {
+    if (p.type !== 'wall' || p.shape) return p;
+    const { dir, ...rest } = p;
+    return { ...rest, shape: 'I', rot: dir === 'v' ? 1 : 0 };
+  }
+
   function startBoard(c, r, saved = []) {
     cols = c;
     rows = r;
-    pieces = saved;
+    pieces = saved.map(migrate);
     nextId = pieces.reduce((m, p) => Math.max(m, p.id), 0) + 1;
     $('setup').classList.add('hidden');
     $('app').classList.remove('hidden');
@@ -348,6 +458,11 @@
     $('rows').value = rows;
     $('app').classList.add('hidden');
     $('setup').classList.remove('hidden');
+  });
+
+  $('shape-rotate').addEventListener('click', () => {
+    shapeRot = (shapeRot + 1) % 4;
+    renderShapePalette();
   });
 
   colorInput.addEventListener('input', renderPegPalette);

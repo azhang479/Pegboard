@@ -97,6 +97,20 @@ button:hover { background: #f0f0f0; }
 .swatch { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px #bbb; cursor: pointer; }
 
 .actions { display: flex; gap: 8px; }
+
+.shape-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.shape-controls .label { font-size: 12px; color: #777; }
+.seg { display: flex; }
+.seg button { padding: 4px 9px; border-radius: 0; margin-left: -1px; }
+.seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 6px 6px 0; }
+.seg button.active { background: var(--ink); color: #fff; border-color: var(--ink); position: relative; }
+#shape-rotate { padding: 4px 10px; }
+.palette-shapes { display: flex; gap: 8px; margin-top: 10px; }
+.shape-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.shape-item .label { font-size: 12px; color: #777; }
+.shape-thumb { position: relative; width: 92px; height: 92px; border: 1px dashed #ddd; border-radius: 8px; }
+.shape-thumb .wall { cursor: grab; }
 .help { font-size: 12px; color: #777; line-height: 1.5; }
 kbd { border: 1px solid #ccc; border-radius: 3px; padding: 0 4px; font-size: 11px; background: #f7f7f7; }
 
@@ -126,18 +140,13 @@ kbd { border: 1px solid #ccc; border-radius: 3px; padding: 0 4px; font-size: 11p
 /* Pieces */
 .wall {
   position: absolute;
-  background: var(--wall);
-  border: 2px solid var(--wall-edge);
-  border-radius: 8px;
-  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.25);
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.3));
 }
-.wall .end {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--wall-edge);
-}
+.wall svg { display: block; overflow: visible; }
+.wall line { stroke-linecap: round; }
+.wall .edge { stroke: var(--wall-edge); }
+.wall .fill { stroke: var(--wall); }
+.wall .dot { fill: var(--wall-edge); }
 .peg {
   position: absolute;
   border-radius: 50%;
@@ -148,7 +157,10 @@ kbd { border: 1px solid #ccc; border-radius: 3px; padding: 0 4px; font-size: 11p
 .board .piece-dragging { opacity: 0.25; }
 
 .preview { pointer-events: none; opacity: 0.6; }
-.preview.invalid { opacity: 0.4; outline: 3px dashed #d62828; outline-offset: 3px; }
+.preview.invalid { opacity: 0.5; }
+.peg.preview.invalid { outline: 3px dashed #d62828; outline-offset: 3px; }
+.wall.preview.invalid .edge, .wall.preview.invalid .dot { stroke: #d62828; fill: #d62828; }
+.wall.preview.invalid .fill { stroke: #f2a3a3; }
 
 .ghost {
   position: fixed;
