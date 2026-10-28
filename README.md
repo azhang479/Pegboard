@@ -14,6 +14,7 @@ python3 -m http.server 8000   # then visit http://localhost:8000
 
 - Enter the number of pegs across (x) and down (y) to generate the board.
 - Drag walls (length 1–6, horizontal or vertical) or single pegs onto the board. A length-N wall spans N+1 holes (length 1 = adjacent holes, length 2 = one hole in between, ...).
+- Corner pieces (L, T, X) have arms of length 1–6, picked with the arm-length buttons; "Rotate" turns the palette versions.
 - Each hole holds only one thing; holes under a wall count as taken.
 - Pick a peg color with the swatches or the color picker.
 - Press `R` while dragging, or double-click a placed wall, to rotate it.
