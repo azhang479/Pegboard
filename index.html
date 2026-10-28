@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pegboard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <section id="setup" class="setup">
+    <form id="setup-form" class="card">
+      <h1>Pegboard</h1>
+      <p>How many pegs wide and tall?</p>
+      <label>Pegs across (x)
+        <input id="cols" type="number" min="2" max="60" value="12" required />
+      </label>
+      <label>Pegs down (y)
+        <input id="rows" type="number" min="2" max="60" value="10" required />
+      </label>
+      <button type="submit">Generate board</button>
+    </form>
+  </section>
+
+  <main id="app" class="app hidden">
+    <aside class="palette">
+      <h2>Horizontal walls</h2>
+      <div id="palette-h" class="palette-row"></div>
+
+      <h2>Vertical walls</h2>
+      <div id="palette-v" class="palette-row vertical"></div>
+
+      <h2>Single peg</h2>
+      <div class="peg-tools">
+        <div id="palette-peg" class="palette-peg"></div>
+        <input id="peg-color" type="color" value="#e63946" title="Peg color" />
+        <div id="swatches" class="swatches"></div>
+      </div>
+
+      <h2>Board</h2>
+      <div class="actions">
+        <button id="clear">Clear pieces</button>
+        <button id="new-board">New board</button>
+      </div>
+      <p class="help">
+        Drag pieces onto the board. Press <kbd>R</kbd> while dragging (or double-click a placed wall) to rotate.
+        Drag a piece off the board or right-click it to remove it.
+      </p>
+    </aside>
+
+    <div class="board-wrap">
+      <div id="board" class="board"></div>
+    </div>
+  </main>
+
+  <div id="ghost" class="ghost hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
